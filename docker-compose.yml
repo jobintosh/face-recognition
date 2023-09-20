@@ -1,0 +1,47 @@
+version: '3'
+services:
+  flask-app:
+    build:
+      context: .
+    ports:
+      - "80:80"
+    environment:
+      - SECRET_KEY=your_secret_key_here
+      - MYSQL_HOST=mariadb
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=jobintosh
+      - MYSQL_DATABASE=flask_db
+      - TZ=Asia/Bangkok  # Set the timezone specifically for the flask-app service
+      - FLASK_APP=app
+    volumes:
+      - ./app:/app/
+    depends_on:
+      - mariadb
+    restart: always  # Add this line to set the restart policy to "always"
+
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb
+    restart: always  # Add this line to set the restart policy to "always"
+    environment:
+      MYSQL_ROOT_PASSWORD: jobintosh
+      MYSQL_DATABASE: jobintosh
+      MYSQL_USER: jobintosh
+      MYSQL_PASSWORD: jobintosh
+      TZ: Asia/Bangkok
+    ports:
+    - 3306:3306
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always  # Add this line to set the restart policy to "always"
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: jobintosh
+    ports:
+      - 8080:80

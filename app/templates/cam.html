@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>iPhone Camera Access</title>
+</head>
+<body>
+    <h1>iPhone Camera Access</h1>
+    <video id="camera" autoplay></video>
+    <button id="capture">Capture Photo</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="photo" src="" alt="Captured Photo">
+
+    <script>
+        // Get references to HTML elements
+        const videoElement = document.getElementById('camera');
+        const captureButton = document.getElementById('capture');
+        const canvasElement = document.getElementById('canvas');
+        const photoElement = document.getElementById('photo');
+        
+        // Access the iPhone camera and stream the video
+        navigator.mediaDevices
+            .getUserMedia({ video: true })
+            .then((stream) => {
+                videoElement.srcObject = stream;
+            })
+            .catch((error) => {
+                console.error('Error accessing camera:', error);
+            });
+
+        // Capture a photo from the camera stream
+        captureButton.addEventListener('click', () => {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
+            const photoDataUrl = canvasElement.toDataURL('image/png');
+            photoElement.src = photoDataUrl;
+        });
+    </script>
+</body>
+</html>
