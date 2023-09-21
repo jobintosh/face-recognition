@@ -25,7 +25,7 @@ const stopCamera = () => {
     }
 }
 
-function displayImageAndLabel(data) {
+function updateImageOutput(data) {
     const imageContainer = document.getElementById('imageContainer');
 
     // Create an image element
@@ -78,7 +78,7 @@ function captureFrame() {
             if (!data || !data.image64) return;
 
             if (data.message === 'done') {
-                displayImageAndLabel(data);
+                updateImageOutput(data);
             } else {
                 console.error('Error: ' + data.message);
             }

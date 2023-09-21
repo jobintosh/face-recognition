@@ -2,8 +2,37 @@
 console.log("uploadURL", uploadURL);
 
 const videoElement = document.getElementById('camera-stream');
-var mediaStream
+var mediaStream;
 var isDone = false;
+var interval;
+
+function updateResult(text, textColor) {
+    // Get the <div> element by its id
+    var resultDiv = document.getElementById('result');
+
+    // Update the inner text of the <div>
+    resultDiv.innerText = text;
+
+    // Update the text color
+    resultDiv.style.color = textColor;
+}
+
+function updateImageOutput(data) {
+    const imageContainer = document.getElementById('imageContainer');
+
+    // Create an image element
+    const imgElement = document.createElement('img');
+    imgElement.src = 'data:image/jpeg;base64,' + data.image64;
+
+    // Create a paragraph element for the label
+    // const labelElement = document.createElement('p');
+    // labelElement.textContent = 'Label: ' + data.label;
+
+    // Clear the loading message and append the image and label
+    imageContainer.innerHTML = '';
+    imageContainer.appendChild(imgElement);
+    // imageContainer.appendChild(labelElement);
+}
 
 // Function to start the camera and return a promise
 const startCamera = () => {
@@ -44,13 +73,30 @@ function captureFrame() {
             'Content-Type': 'application/json'
         }
     })
-        .then((response) => response.text())
-        .then((responseText) => {
-            console.log('Server response:', responseText)
+        .then((response) => response.json())
+        .then((data) => {
+            console.log('Server response:')
+            console.log(data)
 
-            if (responseText.includes("done") && isDone == false){
+            if (!data) return;
+
+            if (data.status && data.status.includes("done") && isDone == false) {
                 isDone = true;
+
+                clearInterval(interval);
+                // alert("Done! training model!");
+                updateResult("Done! please wait for model training...", "green");
+
                 window.location.replace(trainURL);
+                return;
+            }
+
+            if (data.message.includes("successfully")) {
+                updateResult(`Face detected! (only ${100 - data.image_count} left!)`, "green");
+
+                updateImageOutput(data);
+            } else if (data.message.includes("face not found")) {
+                updateResult(`Face not found! please move a little bit!)`, "red");
             }
         })
         .catch((error) => {
@@ -73,6 +119,6 @@ videoElement.addEventListener('ended', function () {
 
 startCamera()
 
-setInterval(() => {
+interval = setInterval(() => {
     captureFrame()
-}, 10);
+}, 100);

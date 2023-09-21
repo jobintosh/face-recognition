@@ -57,7 +57,24 @@ CASCADE_CLASSIF_PATH = "app/resources/haarcascade_frontalface_default.xml"
 
 FACE_CLASSIF_PATH = "classifier.xml"
 
+IMAGE_TRAIN_COUNT = 100
+
+
+class RecognizeResult:
+    label: str
+    confidence: float
+    image: any
+
+
+class SaveResult(RecognizeResult):
+    save_path: str
+    x: int
+    y: int
+    h: int
+    w: int
+
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Generate dataset >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
 
 face_classifier = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
 
@@ -554,107 +571,38 @@ def delete_person(person_id):
         return redirect(url_for('login'))
 
 
-def face_cropped_from_image_path(img_path):
+######################################################
+######################################################
+######################################################
+##################### VERSION 2 ######################
+######################################################
+######################################################
+######################################################
+
+def find_face(img_path):
     # Load the Haar Cascade classifier for face detection
-    face_classifier = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
+    face_cascade = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
 
     # Load the image from the given path
     img = cv2.imread(img_path)
+    if img is None:
+        return []
 
     # Convert the image to grayscale for face detection
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Detect faces in the grayscale image
-    faces = face_classifier.detectMultiScale(
-        gray, scaleFactor=1.3, minNeighbors=5, minSize=(30, 30))
+    faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.3,
+        minNeighbors=5,
+        minSize=(30, 30)
+    )
 
-    if len(faces) == 0:
-        # No faces detected in the image
-        return None
-
-    # Assume only one face is detected (you can modify this if needed)
-    (x, y, w, h) = faces[0]
-
-    # Crop the detected face from the image
-    face_cropped = img[y:y+h, x:x+w]
-
-    return face_cropped
+    return faces
 
 
-def generate_dataset_v2(number_person, image_path):
-    face_cropped_img = face_cropped_from_image_path(image_path)
-
-    if face_cropped_img is None:
-        return None
-
-    face = cv2.resize(face_cropped_img, (200, 200))
-    face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-
-    face_cropped_dir = os.path.join("facecrop", str(number_person))
-    os.makedirs(face_cropped_dir, exist_ok=True)
-
-    filename = os.path.basename(image_path)
-
-    save_path = os.path.join(face_cropped_dir, filename)
-    cv2.imwrite(save_path, face)
-
-    return save_path
-
-
-@app.route('/train/<person_id>')
-def train_face(person_id):
-    person_id = int(person_id)
-    dataset_dir = "dataset"
-
-    face_dir = os.path.join(dataset_dir, str(person_id))
-    print(f"face train dir: {face_dir}")
-    faces = []
-    ids = []
-
-    i = 0
-    for image_path in os.listdir(face_dir):
-        try:
-            print(f"iter count: {i}")
-
-            image_path = os.path.join(face_dir, image_path)
-            print(f"train image: {image_path}")
-
-            face_cropped_image_path = generate_dataset_v2(
-                person_id, image_path)
-            if face_cropped_image_path is None:
-                print(f"face not fount in image: {image_path}")
-                continue
-
-            img = Image.open(face_cropped_image_path).convert('L')
-            imageNp = np.array(img, 'uint8')
-            # id = int(os.path.split(face_cropped_image_path)[1].split(".")[1])
-
-            faces.append(imageNp)
-            ids.append(person_id)
-        except Exception as e:
-            print(f"cannot use image: {image_path}")
-            print(e)
-        finally:
-            i += 1
-            print("\n")
-
-    ids = np.array(ids)
-
-    # Train the classifier and save
-
-    print("cv2 train start:")
-    print(faces)
-    print(ids)
-
-    clf = cv2.face.LBPHFaceRecognizer_create()
-    clf.train(faces, ids)
-
-    clf.write("classifier.xml")
-
-    return redirect('/')
-
-
-def save_image(image_base64, folder_path):
+def save_image_base64(image_base64, folder_path):
     # Generate a unique filename
     unique_filename = str(uuid.uuid4()) + ".jpeg"
     image_path = os.path.join(folder_path, unique_filename)
@@ -667,63 +615,23 @@ def save_image(image_base64, folder_path):
     return unique_filename
 
 
-@app.route('/upload/<int:person_id>', methods=['POST'])
-def upload_image(person_id):
-    try:
-        data = request.json
-        if 'image' in data:
-            image_data = data['image']
-            folder_path = os.path.join("dataset", str(person_id))
+def label_img(img, label, confidence, x, y, w, h):
+    cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-            # Create the folder if it doesn't exist
-            os.makedirs(folder_path, exist_ok=True)
-
-            # Check the number of images in the folder
-            facecrop_dir = os.path.join("facecrop", str(person_id))
-            os.makedirs(facecrop_dir, exist_ok=True)
-            image_count = len([f for f in os.listdir(facecrop_dir)])
-
-            if image_count >= 100:
-                return jsonify({"status": "done"})
-            else:            # Save the image to the folder
-                filename = save_image(image_data, folder_path)
-
-                file_full_path = os.path.join(folder_path, filename)
-
-                face_save_path = generate_dataset_v2(person_id, file_full_path)
-                if face_save_path is None:
-                    return jsonify({"message": "face not found", "filename": filename})
-
-                return jsonify({"message": "Image saved successfully", "filename": filename, "image_count": image_count})
-        else:
-            return jsonify({"error": "No 'image' data provided"}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-class RecognizeResult:
-    label: str
-    confidence: float
-    image: any
-
-
-def recognize_face_internal(image_path):
-    # Load the Haar Cascade classifier for face detection
-    face_cascade = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
-
-    # Load the image from the given path
-    img = cv2.imread(image_path)
-
-    # Convert the image to grayscale for face detection
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Detect faces in the grayscale image
-    faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.3,
-        minNeighbors=5,
-        minSize=(30, 30)
+    label_text = f"{label} ({confidence:.2f})"
+    cv2.putText(
+        img,
+        label_text,
+        (x, y - 10),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        (0, 255, 0),
+        2,
     )
+
+
+def recognize_face_from_img_path(img_path):
+    img = cv2.imread(img_path)
+    faces = find_face(img_path)
 
     if len(faces) == 0:
         print("No faces detected in the image.")
@@ -741,6 +649,7 @@ def recognize_face_internal(image_path):
     # Recognize the detected faces (you need to implement this based on your recognizer)
     recognized_faces = []
 
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     for (x, y, w, h) in faces:
         # Crop the detected face from the image
         face_roi = gray[y:y+h, x:x+w]
@@ -764,11 +673,9 @@ def recognize_face_internal(image_path):
         confidence = face['confidence']
 
         print(f"Face: {label}, Confidence: {confidence}")
-        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        label_text = f"{label} ({confidence:.2f})"
-        cv2.putText(img, label_text, (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        # label the image
+        label_img(img, label, confidence, x, y, w, h)
 
         # break after first face found!
         break
@@ -788,6 +695,155 @@ def recognize_face_internal(image_path):
     return result
 
 
+def generate_dataset_v2(person_id, img_path):
+    faces = find_face(img_path)
+
+    # No faces detected in the image
+    if len(faces) == 0:
+        return None
+
+    # Assume only one face is detected (you can modify this if needed)
+    (x, y, w, h) = faces[0]
+
+    img = cv2.imread(img_path)
+
+    # Crop the detected face from the image
+    face_cropped_img = img[y:y+h, x:x+w]
+
+    if face_cropped_img is None:
+        return None
+
+    face = cv2.resize(face_cropped_img, (200, 200))
+    face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+
+    face_cropped_dir = os.path.join("facecrop", str(person_id))
+    os.makedirs(face_cropped_dir, exist_ok=True)
+
+    filename = os.path.basename(img_path)
+
+    save_path = os.path.join(face_cropped_dir, filename)
+    cv2.imwrite(save_path, face)
+
+    result = SaveResult()
+
+    result.image = face
+    result.label = person_id
+    result.save_path = save_path
+    result.x = x
+    result.y = y
+    result.h = h
+    result.w = w
+
+    return result
+
+
+@app.route('/upload/<int:person_id>', methods=['POST'])
+def upload_image(person_id):
+    try:
+        data = request.json
+        if 'image' in data:
+            image_data_base64 = data['image']
+
+            # create upload directory
+            upload_dir_path = os.path.join("dataset", str(person_id))
+            # Create the folder if it doesn't exist
+            os.makedirs(upload_dir_path, exist_ok=True)
+
+            # create face crop directory
+            facecrop_dir = os.path.join("facecrop", str(person_id))
+            os.makedirs(facecrop_dir, exist_ok=True)
+
+            # Check the number of images in the folder
+            image_count = len([f for f in os.listdir(facecrop_dir)])
+
+            if image_count >= IMAGE_TRAIN_COUNT:
+                # send status done
+                # client side will redirect to train_face route
+                return jsonify({"status": "done"})
+            else:            # Save the image to the folder
+                filename = save_image_base64(
+                    image_data_base64, 
+                    upload_dir_path
+                )
+
+                file_full_path = os.path.join(upload_dir_path, filename)
+
+                save_result = generate_dataset_v2(person_id, file_full_path)
+                if save_result is None:
+                    return jsonify({"message": "face not found", "filename": filename}), 200
+
+                imgread = cv2.imread(file_full_path)
+                label_img(imgread, "detect", 1, save_result.x, save_result.y, save_result.w, save_result.h)
+                imgencode = cv2.imencode('.jpg', imgread)[1].tobytes()
+                base64_image = base64.b64encode(imgencode).decode()
+
+                return jsonify({
+                    "message": "image saved successfully", 
+                    "filename": filename, 
+                    "image_count": image_count, 
+                    "image64": base64_image
+                }), 200
+        else:
+            return jsonify({"error": "No image field in request"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/train/<person_id>')
+def train_face(person_id):
+    person_id = int(person_id)
+
+    face_dir = os.path.join("facecrop", str(person_id))
+    print(f"face train dir: {face_dir}")
+    
+    faces = []
+    ids = []
+
+    i = 0
+    for image_path in os.listdir(face_dir):
+        try:
+            print(f"iter count: {i}")
+
+            image_path = os.path.join(face_dir, image_path)
+            print(f"train image: {image_path}")
+
+            # save_result = generate_dataset_v2(
+            #     person_id,
+            #     image_path
+            # )
+            # if save_result is None:
+            #     print(f"face not fount in image: {image_path}")
+            #     continue
+
+            img = Image.open(image_path).convert('L')
+            imageNp = np.array(img, 'uint8')
+            # id = int(os.path.split(face_cropped_image_path)[1].split(".")[1])
+
+            faces.append(imageNp)
+            ids.append(person_id)
+        except Exception as e:
+            print(f"cannot use image: {image_path}")
+            print(e)
+        finally:
+            i += 1
+            print("")
+
+    ids = np.array(ids)
+
+    # Train the classifier and save
+
+    print("cv2 train start:")
+    # print(faces)
+    # print(ids)
+
+    clf = cv2.face.LBPHFaceRecognizer_create()
+    clf.train(faces, ids)
+    clf.write("classifier.xml")
+    print(f"trained person id: {person_id}")
+
+    return redirect('/')
+
+
 @app.route('/recognize', methods=['POST'])
 def recognize_v2():
     try:
@@ -800,11 +856,12 @@ def recognize_v2():
             os.makedirs(folder_path, exist_ok=True)
 
            # Save the image to the folder
-            filename = save_image(image_data, folder_path)
+            filename = save_image_base64(image_data, folder_path)
 
             image_full_path = os.path.join(folder_path, filename)
 
-            result: RecognizeResult = recognize_face_internal(image_full_path)
+            result: RecognizeResult = recognize_face_from_img_path(
+                image_full_path)
 
             if result is None:
                 return jsonify({"message": "result not found"}), 400
