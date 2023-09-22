@@ -874,6 +874,11 @@ def recognize_v2():
 
             if result is None:
                 return jsonify({"message": "result not found"}), 400
+            
+            # check confidence level
+            print(f"confidence level: {result.confidence}")
+            if result.confidence <= 25:
+                return jsonify({"message": "low confidence"}), 400
 
             # Return the image as a Flask response
             # return Response(result.imgbytes, mimetype='image/jpeg')

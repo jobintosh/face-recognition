@@ -80,12 +80,13 @@ function captureFrame() {
 
             if (data.message === 'done') {
                 updateImageOutput(data);
-            } else {
-                console.error('Error: ' + data.message);
             }
+
+            if (data.message) console.log(data.message);
         })
         .catch(error => {
-            console.error('Fetch error: ' + error);
+            console.error('Fetch error: ');
+            console.error(error);
         });
 }
 
