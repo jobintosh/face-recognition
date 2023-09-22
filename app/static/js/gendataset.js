@@ -22,6 +22,7 @@ function updateImageOutput(data) {
 
     // Create an image element
     const imgElement = document.createElement('img');
+    imgElement.style = "max-width: 500px; max-height: 500px;";
     imgElement.src = 'data:image/jpeg;base64,' + data.image64;
 
     // Create a paragraph element for the label

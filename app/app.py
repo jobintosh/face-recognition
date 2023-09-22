@@ -640,7 +640,7 @@ def recognize_face_from_img_path(img_path):
 
     if len(faces) == 0:
         print("No faces detected in the image.")
-        return
+        return None
 
     # Save the input image with recognized faces
     output_image_path = 'test.jpeg'
@@ -798,71 +798,56 @@ def upload_image(person_id):
 @app.route('/train/<person_id>')
 def train_face(person_id):
     person_id = int(person_id)
+    print(f"train start for person id: {person_id}")
 
     face_dir = os.path.join("facecrop", str(person_id))
     print(f"face train dir: {face_dir}")
 
-    clf = cv2.face.LBPHFaceRecognizer_create()
-
-    faces = np.empty((0, ), dtype=np.uint8)
-    ids = np.empty((0,), dtype=np.int32)
+    recognizer = cv2.face.LBPHFaceRecognizer_create()
 
     is_old_classif_exists = os.path.exists("classifier.xml")
+
     # if classifier.xml exists, read it
     if is_old_classif_exists is True:
         # read the existing classifier
-        clf.read("classifier.xml")
-
-        # Get the existing training data
-        data = clf.getHistograms()
-        faces, ids = np.array(data[0]), np.squeeze(np.array(data[1]))
-    else:
-        faces = np.empty((0, 128), dtype=np.uint8)
-        ids = np.empty((0,), dtype=np.int32)
-
-    # Add new faces to the existing training data
-    new_faces = []
-    new_ids = []
+        recognizer.read("classifier.xml")
+        
+    # init variable
+    faces = []
+    ids = []
 
     i = 0
     for image_path in os.listdir(face_dir):
         try:
-            print(f"iter count: {i}")
-
             image_path = os.path.join(face_dir, image_path)
-            print(f"train image: {image_path}")
 
-            img = Image.open(image_path).convert('L')   
-            imageNp = np.array(img, 'uint8')
-
-            new_faces.append(imageNp)
-            new_ids.append(person_id)
+            img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+            flattened_img = np.array(img, 'uint8')
+            
+            faces.append(flattened_img)
+            ids.append(person_id)
         except Exception as e:
             print(f"cannot use image: {image_path}")
             print(e)
+            print("")
         finally:
             i += 1
-            print("")
 
-    # convert to numpy array
-    new_ids = np.array(new_ids)
-
-    if is_old_classif_exists is True:
-        # Add the new faces to the existing training data
-        # faces.extend(new_faces)
-        # ids.extend(new_ids)
-        # Add the new faces to the existing training data
-        faces = np.concatenate((faces, new_faces))
-        ids = np.concatenate((ids, new_ids))
-    else:
-        faces = new_faces
-        ids = new_ids
+    # convert to numpy arrays
+    faces = np.array(faces)
+    ids = np.array(ids)
 
     print("cv2 train start:")
 
-    # Train the classifier and save
-    clf.train(faces, ids)
-    clf.write("classifier.xml")
+    # Train the classifier
+    if is_old_classif_exists is True:
+        recognizer.update(faces, ids)
+    else:
+        recognizer.train(faces, ids)
+    
+    # save classifier
+    recognizer.write("classifier.xml")
+    
     print(f"trained person id: {person_id}")
 
     return redirect('/')
