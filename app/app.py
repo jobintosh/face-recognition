@@ -37,13 +37,18 @@ logger.addHandler(handler)
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
 
+# Add the application attribute required by Gunicorn
+application = app
 
 cnt = 0
 pause_cnt = 0
 justscanned = False
 
+# load from env MYSQL_HOST first, if not found, use default value 'localhost'
+MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
+
 mydb = mysql.connector.connect(
-    host="localhost",
+    host=MYSQL_HOST,
     user="root",
     passwd="jobintosh",
     database="flask_db"
@@ -482,7 +487,7 @@ def fr_page():
 def countTodayScan():
     try:
         mydb = mysql.connector.connect(
-            host="localhost",
+            host=MYSQL_HOST,
             user="root",
             passwd="jobintosh",
             database="flask_db"
