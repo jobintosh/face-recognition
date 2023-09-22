@@ -37,13 +37,18 @@ logger.addHandler(handler)
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
 
+# Add the application attribute required by Gunicorn
+application = app
 
 cnt = 0
 pause_cnt = 0
 justscanned = False
 
+# load from env MYSQL_HOST first, if not found, use default value 'localhost'
+MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
+
 mydb = mysql.connector.connect(
-    host="localhost",
+    host=MYSQL_HOST,
     user="root",
     passwd="jobintosh",
     database="flask_db"
@@ -482,7 +487,7 @@ def fr_page():
 def countTodayScan():
     try:
         mydb = mysql.connector.connect(
-            host="localhost",
+            host=MYSQL_HOST,
             user="root",
             passwd="jobintosh",
             database="flask_db"
@@ -762,7 +767,7 @@ def upload_image(person_id):
                 return jsonify({"status": "done"})
             else:            # Save the image to the folder
                 filename = save_image_base64(
-                    image_data_base64, 
+                    image_data_base64,
                     upload_dir_path
                 )
 
@@ -773,14 +778,15 @@ def upload_image(person_id):
                     return jsonify({"message": "face not found", "filename": filename}), 200
 
                 imgread = cv2.imread(file_full_path)
-                label_img(imgread, "detect", 1, save_result.x, save_result.y, save_result.w, save_result.h)
+                label_img(imgread, "detect", 1, save_result.x,
+                          save_result.y, save_result.w, save_result.h)
                 imgencode = cv2.imencode('.jpg', imgread)[1].tobytes()
                 base64_image = base64.b64encode(imgencode).decode()
 
                 return jsonify({
-                    "message": "image saved successfully", 
-                    "filename": filename, 
-                    "image_count": image_count, 
+                    "message": "image saved successfully",
+                    "filename": filename,
+                    "image_count": image_count,
                     "image64": base64_image
                 }), 200
         else:
@@ -795,9 +801,28 @@ def train_face(person_id):
 
     face_dir = os.path.join("facecrop", str(person_id))
     print(f"face train dir: {face_dir}")
-    
-    faces = []
-    ids = []
+
+    clf = cv2.face.LBPHFaceRecognizer_create()
+
+    faces = np.empty((0, ), dtype=np.uint8)
+    ids = np.empty((0,), dtype=np.int32)
+
+    is_old_classif_exists = os.path.exists("classifier.xml")
+    # if classifier.xml exists, read it
+    if is_old_classif_exists is True:
+        # read the existing classifier
+        clf.read("classifier.xml")
+
+        # Get the existing training data
+        data = clf.getHistograms()
+        faces, ids = np.array(data[0]), np.squeeze(np.array(data[1]))
+    else:
+        faces = np.empty((0, 128), dtype=np.uint8)
+        ids = np.empty((0,), dtype=np.int32)
+
+    # Add new faces to the existing training data
+    new_faces = []
+    new_ids = []
 
     i = 0
     for image_path in os.listdir(face_dir):
@@ -807,20 +832,11 @@ def train_face(person_id):
             image_path = os.path.join(face_dir, image_path)
             print(f"train image: {image_path}")
 
-            # save_result = generate_dataset_v2(
-            #     person_id,
-            #     image_path
-            # )
-            # if save_result is None:
-            #     print(f"face not fount in image: {image_path}")
-            #     continue
-
-            img = Image.open(image_path).convert('L')
+            img = Image.open(image_path).convert('L')   
             imageNp = np.array(img, 'uint8')
-            # id = int(os.path.split(face_cropped_image_path)[1].split(".")[1])
 
-            faces.append(imageNp)
-            ids.append(person_id)
+            new_faces.append(imageNp)
+            new_ids.append(person_id)
         except Exception as e:
             print(f"cannot use image: {image_path}")
             print(e)
@@ -828,15 +844,23 @@ def train_face(person_id):
             i += 1
             print("")
 
-    ids = np.array(ids)
+    # convert to numpy array
+    new_ids = np.array(new_ids)
 
-    # Train the classifier and save
+    if is_old_classif_exists is True:
+        # Add the new faces to the existing training data
+        # faces.extend(new_faces)
+        # ids.extend(new_ids)
+        # Add the new faces to the existing training data
+        faces = np.concatenate((faces, new_faces))
+        ids = np.concatenate((ids, new_ids))
+    else:
+        faces = new_faces
+        ids = new_ids
 
     print("cv2 train start:")
-    # print(faces)
-    # print(ids)
 
-    clf = cv2.face.LBPHFaceRecognizer_create()
+    # Train the classifier and save
     clf.train(faces, ids)
     clf.write("classifier.xml")
     print(f"trained person id: {person_id}")
