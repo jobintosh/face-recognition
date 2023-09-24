@@ -4,7 +4,7 @@ services:
     build:
       context: .
     ports:
-      - "80:80"
+      - "80:5000"
     environment:
       - SECRET_KEY=your_secret_key_here
       - MYSQL_HOST=mariadb
@@ -13,9 +13,9 @@ services:
       - MYSQL_PASSWORD=jobintosh
       - MYSQL_DATABASE=flask_db
       - TZ=Asia/Bangkok  # Set the timezone specifically for the flask-app service
-      - FLASK_APP=app
-    volumes:
-      - ./app:/app/
+      # - FLASK_APP=app
+    # volumes:
+      # - ./app:/app/
     depends_on:
       - mariadb
     restart: always  # Add this line to set the restart policy to "always"
