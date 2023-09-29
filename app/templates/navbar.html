@@ -6,7 +6,20 @@
     <title>Your Face Recognition Locker System</title>
     <!-- Link to Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-     <!--  integrity="sha384-KyZXEAg3QhqLMpG8r+Jp/w2jOTw6J1HRF5F5znr5uqtvx2+p8iEj4F+Kp7LE"  -->
+    <!--  integrity="sha384-KyZXEAg3QhqLMpG8r+Jp/w2jOTw6J1HRF5F5znr5uqtvx2+p8iEj4F+Kp7LE"  -->
+
+    <style>
+        /* Custom CSS for button alignment and color */
+        .navbar .ml-auto .btn {
+            margin-left: 10px;
+            background-color: #00b900;
+            border: none;
+        }
+
+        .navbar .ml-auto .btn:hover {
+            background-color: #008700;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg py-2 navbar-dark bg-dark shadow-sm">
@@ -17,27 +30,29 @@
                 <!-- Logo Text -->
                 <span class="font-weight-bold">Face Recognition Locker System</span>
             </a>
+                {% if 'user_id' in session %}
+                    <span class="navbar-text mr-2 welcome-text">
+                        Welcome, {{ session['username'] }}
+                    </span>
+                    <a href="{{ url_for('edit_profile', user_id=session['user_id']) }}" class="btn btn-primary btn-sm ml-auto">Profile</a>
+                    <a href="{{ url_for('logs') }}" class="btn btn-secondary btn-sm ml-2">Logs</a>
+                    <a href="https://lin.ee/uET4PoB" class="btn btn-info btn-sm ml-2">Notifications</a>
+                {% endif %}
+        
+                <!-- Logout button if logged in -->
+                {% if 'user_id' in session %}
+                    <form action="{{ url_for('logout') }}" method="post" class="form-inline">
+                        <button type="submit" class="btn btn-danger btn-sm ml-2">Logout</button>
+                    </form>
+                {% else %}
+                    <!-- Add a login link or button here for users who are not logged in -->
+                {% endif %}
+            </div>
+        </nav>
+        
+        <!-- Your page content goes here -->
 
-            <!-- Display the current user's name if logged in -->
-            {% if 'user_id' in session %}
-                <span class="navbar-text mr-2 welcome-text">Welcome, {{ session['username'] }}</span>
-            {% endif %}
-
-            <!-- Logout button if logged in -->
-            {% if 'user_id' in session %}
-                <form action="{{ url_for('logout') }}" method="post" class="form-inline">
-                    <button type="submit" class="btn btn-danger">Logout</button>
-                </form>
-            {% else %}
-                <!-- Add a login link or button here for users who are not logged in -->
-            {% endif %}
-        </div>
-    </nav>
-
-    <!-- Your page content goes here -->
-
-    <!-- Link to Bootstrap JS and Popper.js (required for Bootstrap's JavaScript plugins) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
-    <!--  integrity="sha384-pzjw8f+ua3RE5ndR6tq7uZY5s0mo8d0EmaTRf5f5DI1k3u6f5p3m63Vh5P5f5f5f5"  -->
+        <!-- Link to Bootstrap JS and Popper.js (required for Bootstrap's JavaScript plugins) -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
 </body>
 </html>

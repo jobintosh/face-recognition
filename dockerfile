@@ -6,7 +6,7 @@ FROM python:3.11.5-bookworm
 # Set the working directory to /app
 WORKDIR /app
 
-COPY ["./installdeps.sh", "./requirements.txt", "/app/"]
+COPY ["./installdeps.sh", "./requirements.txt","/app/"]
 
 # Install any needed packages specified in requirements.txt
 RUN /app/installdeps.sh
@@ -20,4 +20,5 @@ COPY . /app
 RUN chmod -R 777 /app
 
 # Define the command to run your app.py script
+
 CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "app.app"]

@@ -16,6 +16,11 @@ from email.mime.text import MIMEText
 import random
 import string
 import cv2
+from datetime import datetime
+import stripe
+
+stripe.api_key = 'sk_test_51NutLPBGGzOWH6WKvYHArctigy1hgkbnJKYslyXf4qDpm6gsbD1H7vA3YFVisTrkJIpve1DiV9yruIZ5QZ8dc4KS00dh18YMQB'
+
 
 # Create a logger
 logger = logging.getLogger(__name__)
@@ -48,9 +53,9 @@ justscanned = False
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 
 mydb = mysql.connector.connect(
-    host=MYSQL_HOST,
+    host="mariadb",
     user="root",
-    passwd="jobintosh",
+    passwd="6u&h^j=U0w)bc[f",
     database="flask_db"
 )
 mycursor = mydb.cursor()
@@ -62,7 +67,7 @@ CASCADE_CLASSIF_PATH = "app/resources/haarcascade_frontalface_default.xml"
 
 FACE_CLASSIF_PATH = "classifier.xml"
 
-IMAGE_TRAIN_COUNT = 100
+IMAGE_TRAIN_COUNT = 300
 
 
 class RecognizeResult:
@@ -80,7 +85,6 @@ class SaveResult(RecognizeResult):
 
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Generate dataset >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-
 face_classifier = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
 
 
@@ -95,46 +99,6 @@ def face_cropped(img):
     for (x, y, w, h) in faces:
         cropped_face = img[y:y + h, x:x + w]
     return cropped_face
-
-
-# def generate_dataset(number_person, image_folder_path):
-#     # receive the
-#     # cap = cv2.VideoCapture(0)
-
-#     mycursor.execute("select ifnull(max(img_id), 0) from img_dataset")
-#     row = mycursor.fetchone()
-#     lastid = row[0]
-
-#     img_id = lastid
-#     max_imgid = img_id + 100
-#     count_img = 0
-
-#     while True:
-#         # ret, img = cap.read()
-#         if face_cropped(img) is not None:
-#             count_img += 1
-#             img_id += 1
-#             face = cv2.resize(face_cropped(img), (200, 200))
-#             face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-
-#             file_name_path = "dataset/" + \
-#                 number_person+"." + str(img_id) + ".jpg"
-#             cv2.imwrite(file_name_path, face)
-#             cv2.putText(face, str(count_img), (50, 50),
-#                         cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
-
-#             mycursor.execute("""INSERT INTO `img_dataset` (`img_id`, `img_person`) VALUES
-#                                 ('{}', '{}')""".format(img_id, number_person))
-#             mydb.commit()
-
-#             frame = cv2.imencode('.jpg', face)[1].tobytes()
-#             yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-
-#             if cv2.waitKey(1) == 13 or int(img_id) == int(max_imgid):
-#                 break
-#                 cap.release()
-#                 cv2.destroyAllWindows()
-
 
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Train Classifier >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 @app.route('/train_classifier/<nbr>')
@@ -154,13 +118,11 @@ def train_classifier(nbr):
         ids.append(id)
     ids = np.array(ids)
 
-    # Train the classifier and save
     clf = cv2.face.LBPHFaceRecognizer_create()
     clf.train(faces, ids)
     clf.write("classifier.xml")
 
     return redirect('/')
-
 
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Face Recognition >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 def face_recognition():
@@ -197,9 +159,9 @@ def face_recognition():
                 cv2.rectangle(img, (x, y + h + 40), (x + int(w_filled), y + h + 50), (153, 255, 255),
                               cv2.FILLED)
 
-                mycursor.execute("select a.img_person, b.prs_name, b.prs_skill "
+                mycursor.execute("select a.img_person, b.full_name, b.locker_no "
                                  "  from img_dataset a "
-                                 "  left join prs_mstr b on a.img_person = b.prs_nbr "
+                                 "  left join personnel_data b on a.img_person = b.personnel_id "
                                  " where img_id = " + str(id))
                 row = mycursor.fetchone()
                 pnbr = row[0]
@@ -210,7 +172,7 @@ def face_recognition():
                     cnt = 0
 
                     mycursor.execute(
-                        "insert into accs_hist (accs_date, accs_prsn) values('" + str(date.today()) + "', '" + pnbr + "')")
+                        "insert into activity_log (accs_date, accs_prsn) values('" + str(date.today()) + "', '" + pnbr + "')")
                     mydb.commit()
 
                     cv2.putText(img, pname + ' | ' + pskill, (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
@@ -253,7 +215,7 @@ def face_recognition():
         ret, img = cap.read()
 
         if not ret:
-            continue  # Skip frames that are not successfully captured.
+            continue
 
         img = recognize(img, clf, face_cascade)
 
@@ -271,19 +233,20 @@ def face_recognition():
 def home():
     if 'user_id' in session:
         mycursor.execute(
-            "select prs_nbr, prs_name, prs_skill, prs_active, prs_added from prs_mstr")
+            "select personnel_id, full_name, locker_no, active, added from personnel_data")
         data = mycursor.fetchall()
         username = session['username']
         return render_template('index.html', data=data, username=username)
     else:
         return 'You are not logged in. <a href="/login">Login</a>'
-
+    
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username_or_email = request.form['username_or_email']
         password = request.form['password']
+        
 
         cursor = mydb.cursor()
         cursor.execute("SELECT id, username, email, password_hash FROM users WHERE username=%s OR email=%s",
@@ -293,7 +256,6 @@ def login():
         if user:
             user_id, db_username, db_email, db_password_hash = user
 
-            # Verify the hashed password
             input_password_hash = hashlib.sha256(password.encode()).hexdigest()
             if input_password_hash == db_password_hash:
                 session['user_id'] = user_id
@@ -307,6 +269,49 @@ def login():
 
     return render_template('login.html')
 
+# @app.route('/login', methods=['GET', 'POST'])
+# def login():
+#     if request.method == 'POST':
+#         username_or_email = request.form['username_or_email']
+#         password = request.form['password']
+#         recaptcha_response = request.form['g-recaptcha-response']  # รับข้อมูล reCAPTCHA
+
+#         recaptcha_secret_key = '6Leck1IoAAAAAA3kDnwU_ovbJvY8jXn7K5Ln5x-Q'  # รหัสลับ reCAPTCHA (ให้เปลี่ยนเป็นรหัสที่คุณได้รับ)
+#         recaptcha_url = 'https://www.google.com/recaptcha/api/siteverify'
+#         recaptcha_data = {
+#             'secret': recaptcha_secret_key,
+#             'response': recaptcha_response
+#         }
+
+#         response = requests.post(recaptcha_url, data=recaptcha_data)
+#         recaptcha_result = response.json()
+
+#         if recaptcha_result['success']:
+#             # reCAPTCHA ยืนยันสำเร็จ
+#             cursor = mydb.cursor()
+#             cursor.execute("SELECT id, username, email, password_hash FROM users WHERE username=%s OR email=%s",
+#                            (username_or_email, username_or_email))
+#             user = cursor.fetchone()
+
+#             if user:
+#                 user_id, db_username, db_email, db_password_hash = user
+
+#                 input_password_hash = hashlib.sha256(password.encode()).hexdigest()
+#                 if input_password_hash == db_password_hash:
+#                     session['user_id'] = user_id
+#                     session['username'] = db_username
+#                     flash('Login successful!', 'success')
+#                     return redirect(url_for('home'))
+#                 else:
+#                     flash('Incorrect password. Please try again.', 'error')
+#             else:
+#                 flash('Login failed. Please check your credentials.', 'error')
+#         else:
+#             # reCAPTCHA ไม่ยืนยัน
+#             flash('reCAPTCHA verification failed. Please try again.', 'error')
+
+#     return render_template('login.html')
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -319,7 +324,6 @@ def register():
         phonenumber = request.form['phonenumber']
         password_confirm = request.form['password_confirm']
 
-        # Check if the passwords match
         if password != password_confirm:
             flash('Passwords do not match. Please try again.', 'error')
         else:
@@ -332,10 +336,8 @@ def register():
                 flash(
                     'Username already in use. Please choose a different username.', 'error')
             else:
-                # Hash the password before storing it (you should use a stronger hashing method)
                 password_hash = hashlib.sha256(password.encode()).hexdigest()
 
-                # Insert user data into the database
                 cursor.execute("INSERT INTO users (username, password_hash, firstname, lastname, email, phonenumber) VALUES (%s, %s, %s, %s, %s, %s)",
                                (username, password_hash, firstname, lastname, email, phonenumber))
                 mydb.commit()
@@ -351,25 +353,21 @@ def forgot_password():
     if request.method == 'POST':
         email = request.form['email']
 
-        # Check if the email exists in the database
         cursor = mydb.cursor()
         cursor.execute(
             "SELECT id, username FROM users WHERE email=%s", (email,))
         user = cursor.fetchone()
 
         if user:
-            # Generate a temporary password
             temp_password = ''.join(random.choices(
                 string.ascii_letters + string.digits, k=12))
             hashed_temp_password = hashlib.sha256(
                 temp_password.encode()).hexdigest()
 
-            # Update the user's password in the database with the temporary password
             cursor.execute(
                 "UPDATE users SET password_hash=%s WHERE id=%s", (hashed_temp_password, user[0]))
             mydb.commit()
 
-            # Send an email with the temporary password
             send_password_reset_email(email, temp_password)
 
             flash(
@@ -387,7 +385,6 @@ def send_password_reset_email(email, temp_password):
     msg['From'] = 'thetharathorn@gmail.com'
     msg['To'] = email
 
-    # Use an SMTP server to send the email
     try:
         smtp_server = smtplib.SMTP('smtp.gmail.com', 587)
         smtp_server.starttls()
@@ -405,10 +402,12 @@ def send_password_reset_email(email, temp_password):
 def index():
     if 'user_id' in session:
         mycursor.execute(
-            "select prs_nbr, prs_name, prs_skill, prs_active, prs_added from prs_mstr")
+            "select personnel_id, full_name, locker_no, active, added from personnel_data")
         data = mycursor.fetchall()
         username = session['username']
         return render_template('index.html', data=data, username=username)
+    else:
+        return 'You are not logged in. <a href="/login">Login</a>'
 
 
 @app.route('/logout', methods=['GET', 'POST'])
@@ -418,8 +417,6 @@ def logout():
         flash('Logout successful.', 'success')
         return redirect(url_for('login'))
     else:
-        # Handle other HTTP methods if needed
-        # Return a 405 Method Not Allowed status for unsupported methods
         return 'Method Not Allowed', 405
 
 
@@ -428,7 +425,7 @@ def logout():
 @app.route('/addprsn')
 def addprsn():
     if 'user_id' in session:
-        mycursor.execute("select ifnull(max(prs_nbr) + 1, 101) from prs_mstr")
+        mycursor.execute("select ifnull(max(personnel_id) + 1, 101) from personnel_data")
         row = mycursor.fetchone()
         nbr = row[0]
         # print(int(nbr))
@@ -443,7 +440,7 @@ def addprsn_submit():
     prsname = request.form.get('txtname')
     prsskill = request.form.get('optskill')
 
-    mycursor.execute("""INSERT INTO `prs_mstr` (`prs_nbr`, `prs_name`, `prs_skill`) VALUES
+    mycursor.execute("""INSERT INTO `personnel_data` (`personnel_id`, `full_name`, `locker_no`) VALUES
                     ('{}', '{}', '{}')""".format(prsnbr, prsname, prsskill))
     mydb.commit()
 
@@ -456,12 +453,6 @@ def vfdataset_page(prs):
     return render_template('gendataset.html', prs=prs)
 
 
-# @app.route('/vidfeed_dataset/<nbr>')
-# def vidfeed_dataset(nbr):
-#     # Video streaming route. Put this in the src attribute of an img tag
-#     return Response(generate_dataset(nbr), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
 @app.route('/video_feed')
 def video_feed():
     # Video streaming route. Put this in the src attribute of an img tag
@@ -471,13 +462,13 @@ def video_feed():
 @app.route('/fr_page')
 def fr_page():
     if 'user_id' in session:
-        mycursor.execute("select a.accs_id, a.accs_prsn, b.prs_name, b.prs_skill, a.accs_added "
-                         "  from accs_hist a "
-                         "  left join prs_mstr b on a.accs_prsn = b.prs_nbr "
+        mycursor.execute("select a.accs_id, a.accs_prsn, b.full_name, b.locker_no, a.accs_added "
+                         "  from activity_log a "
+                         "  left join personnel_data b on a.accs_prsn = b.personnel_id "
                          " where a.accs_date = curdate() "
                          " order by 1 desc")
         data = mycursor.fetchall()
-        print("Data from fr_page:", data)  # Add this line to print data
+        print("Data from fr_page:", data)
         return render_template('fr_page.html', data=data)
     else:
         return 'You are not logged in. <a href="/login">Login</a>'
@@ -487,24 +478,22 @@ def fr_page():
 def countTodayScan():
     try:
         mydb = mysql.connector.connect(
-            host=MYSQL_HOST,
+            host="mariadb",
             user="root",
-            passwd="jobintosh",
+            passwd="6u&h^j=U0w)bc[f",
             database="flask_db"
         )
         mycursor = mydb.cursor()
 
         mycursor.execute("select count(*) "
-                         "  from accs_hist "
+                         "  from activity_log "
                          " where accs_date = curdate() ")
         row = mycursor.fetchone()
         rowcount = row[0]
-        # Add this line to print row count
         print("Row count from countTodayScan:", rowcount)
         return jsonify({'rowcount': rowcount})
     except Exception as e:
         logger.error(f"Error in countTodayScan: {str(e)}")
-        # Return an error response with a status code
         return jsonify({'error': 'An error occurred'}), 500
 
 
@@ -514,22 +503,21 @@ def loadData():
         mydb = mysql.connector.connect(
             host="mariadb",
             user="root",
-            passwd="jobintosh",
+            passwd="6u&h^j=U0w)bc[f",
             database="flask_db"
         )
         mycursor = mydb.cursor()
 
-        mycursor.execute("select a.accs_id, a.accs_prsn, b.prs_name, b.prs_skill, date_format(a.accs_added, '%H:%i:%s') "
-                         "  from accs_hist a "
-                         "  left join prs_mstr b on a.accs_prsn = b.prs_nbr "
+        mycursor.execute("select a.accs_id, a.accs_prsn, b.full_name, b.locker_no, date_format(a.accs_added, '%H:%i:%s') "
+                         "  from activity_log a "
+                         "  left join personnel_data b on a.accs_prsn = b.personnel_id "
                          " where a.accs_date = curdate() "
                          " order by 1 desc")
         data = mycursor.fetchall()
-        print("Data from loadData:", data)  # Add this line to print data
+        print("Data from loadData:", data) 
         return jsonify(response=data)
     except Exception as e:
         logger.error(f"Error in loadData: {str(e)}")
-        # Return an error response with a status code
         return jsonify({'error': 'An error occurred'}), 500
 
 
@@ -541,7 +529,7 @@ def edit(person_id):
             new_skill = request.form['locker']
 
             cur = mydb.cursor()
-            cur.execute("UPDATE prs_mstr SET prs_name=%s, prs_skill=%s WHERE prs_nbr=%s",
+            cur.execute("UPDATE personnel_data SET full_name=%s, locker_no=%s WHERE personnel_id=%s",
                         (new_name, new_skill, person_id))
             mydb.commit()
 
@@ -550,7 +538,7 @@ def edit(person_id):
 
         cur = mydb.cursor()
         cur.execute(
-            "SELECT prs_name, prs_skill FROM prs_mstr WHERE prs_nbr=%s", (person_id,))
+            "SELECT full_name, locker_no FROM personnel_data WHERE personnel_id=%s", (person_id,))
         data = cur.fetchone()
         return render_template('edit.html', data=data, person_id=person_id)
     else:
@@ -561,11 +549,10 @@ def edit(person_id):
 def delete_person(person_id):
     if 'user_id' in session:
         if request.method == 'POST':
-            # Delete the personnel record from the database
-            cursor = mydb.cursor()  # Use mydb.cursor() instead of mydb.connection.cursor()
+            cursor = mydb.cursor()
             cursor.execute(
-                "DELETE FROM prs_mstr WHERE prs_nbr = %s", (person_id,))
-            mydb.commit()  # Use mydb.commit() to save the changes
+                "DELETE FROM personnel_data WHERE personnel_id = %s", (person_id,))
+            mydb.commit()
             cursor.close()
 
             flash('Personnel record deleted successfully!', 'success')
@@ -576,24 +563,17 @@ def delete_person(person_id):
         return redirect(url_for('login'))
 
 
-######################################################
-######################################################
-######################################################
-##################### VERSION 2 ######################
-######################################################
-######################################################
-######################################################
+
+########################################## VERSION 2 ###########################################################
+
 
 def find_face(img_path):
-    # Load the Haar Cascade classifier for face detection
     face_cascade = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
 
-    # Load the image from the given path
     img = cv2.imread(img_path)
     if img is None:
         return []
 
-    # Convert the image to grayscale for face detection
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Detect faces in the grayscale image
@@ -864,7 +844,7 @@ def recognize_v2():
             # Create the folder if it doesn't exist
             os.makedirs(folder_path, exist_ok=True)
 
-           # Save the image to the folder
+            # Save the image to the folder
             filename = save_image_base64(image_data, folder_path)
 
             image_full_path = os.path.join(folder_path, filename)
@@ -874,30 +854,154 @@ def recognize_v2():
 
             if result is None:
                 return jsonify({"message": "result not found"}), 400
-            
-            # check confidence level
+
+            # Check confidence level
             print(f"confidence level: {result.confidence}")
-            if result.confidence <= 25:
+            if result.confidence <= 40:
                 return jsonify({"message": "low confidence"}), 400
 
-            # Return the image as a Flask response
-            # return Response(result.imgbytes, mimetype='image/jpeg')
+            # Now, let's fetch the recognized person's label and save it in activity_log
+            recognized_label = result.label
 
+            # Insert data into the 'activity_log' table
+            sql = "INSERT INTO activity_log (accs_date, accs_prsn, accs_added) VALUES (%s, %s, %s)"
+            val = (datetime.today(), recognized_label, datetime.now())
+            mycursor.execute(sql, val)
+            mydb.commit()
+
+            # Encode the result image and send it to detect.js
             base64_image = base64.b64encode(result.image).decode()
 
-            return jsonify({"message": "done", "label": result.label, "image64": base64_image})
+            return jsonify({"message": "done", "label": recognized_label, "image64": base64_image})
         else:
             return jsonify({"error": "No image"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/edit_profile/<int:user_id>', methods=['GET', 'POST'])
+def edit_profile(user_id):
+    if 'user_id' not in session:
+        # User is not logged in, so redirect to the login page
+        return redirect(url_for('login'))
 
-# v = face_cropped_from_image_path("/workspaces/hjob-face-recognition/elon.jpg")
-# print(v)
+    # Check if the logged-in user is authorized to edit this profile
+    if session['user_id'] != user_id:
+        # Unauthorized access, you can handle this as per your application's requirements
+        return "Unauthorized access"
 
+    # The rest of your code for editing the profile remains the same
+    mycursor = mydb.cursor()
+    mycursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    user = mycursor.fetchone()
 
-# recog_test = recognize_face_internal(
-#     "dataset/122/9608dc71-f35a-4bb9-8c7f-3bc8017f71e9.jpeg")
-# print(recog_test)
+    if request.method == 'POST':
+        firstname = request.form['firstname']
+        lastname = request.form['lastname']
+        email = request.form['email']
+        phonenumber = request.form['phonenumber']
+
+        # Check if a new password was provided
+        new_password = request.form['new_password']
+
+        # Update user data in the database
+        if new_password:
+            # Hash the new password before updating it
+            hashed_password = hashlib.sha256(new_password.encode()).hexdigest()
+            mycursor.execute("UPDATE users SET firstname = %s, lastname = %s, email = %s, phonenumber = %s, password_hash = %s WHERE id = %s",
+                             (firstname, lastname, email, phonenumber, hashed_password, user_id))
+        else:
+            mycursor.execute("UPDATE users SET firstname = %s, lastname = %s, email = %s, phonenumber = %s WHERE id = %s",
+                             (firstname, lastname, email, phonenumber, user_id))
+
+        mydb.commit()
+        mycursor.close()
+        return redirect(url_for('index'))
+
+    mycursor.close()
+    return render_template('profile.html', user=user)
+
+YOUR_DOMAIN = 'https://locker.jobintosh.me'
+
+@app.route('/success')
+def success():
+    return render_template('success.html')
+
+# Define the route for the cancel page
+@app.route('/cancel')
+def cancel():
+    return render_template('cancel.html')
+
+@app.route('/create-checkout-session', methods=['POST'])
+def create_checkout_session():
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            line_items=[
+                {
+                    # Provide the exact Price ID (for example, pr_1234) of the product you want to sell
+                    'price': 'price_1NutemBGGzOWH6WKIywdDoNf',
+                    'quantity': 1,
+                },
+            ],
+            mode='payment',
+            success_url=YOUR_DOMAIN + '/success',
+            cancel_url=YOUR_DOMAIN + '/cancel',
+        )
+    except Exception as e:
+        return str(e)
+
+    return redirect(checkout_session.url, code=303)
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    event = None
+    payload = request.data
+
+    try:
+        event = json.loads(payload)
+    except:
+        print('⚠️  Webhook error while parsing basic request.' + str(e))
+        return jsonify(success=False)
+    if endpoint_secret:
+        # Only verify the event if there is an endpoint secret defined
+        # Otherwise use the basic event deserialized with json
+        sig_header = request.headers.get('stripe-signature')
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except stripe.error.SignatureVerificationError as e:
+            print('⚠️  Webhook signature verification failed.' + str(e))
+            return jsonify(success=False)
+
+    # Handle the event
+    if event and event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']  # contains a stripe.PaymentIntent
+        print('Payment for {} succeeded'.format(payment_intent['amount']))
+        # Then define and call a method to handle the successful payment intent.
+        # handle_payment_intent_succeeded(payment_intent)
+    elif event['type'] == 'payment_method.attached':
+        payment_method = event['data']['object']  # contains a stripe.PaymentMethod
+        # Then define and call a method to handle the successful attachment of a PaymentMethod.
+        # handle_payment_method_attached(payment_method)
+    else:
+        # Unexpected event type
+        print('Unhandled event type {}'.format(event['type']))
+
+    return jsonify(success=True)
+    
+@app.route('/logs')
+def logs():
+    if 'user_id' in session:
+        mycursor.execute("select a.accs_id, a.accs_prsn, b.full_name, b.locker_no, a.accs_added "
+                         "  from activity_log a "
+                         "  left join personnel_data b on a.accs_prsn = b.personnel_id "
+                         " order by 1 desc")
+        data = mycursor.fetchall()
+        print("Data from logs:", data)
+        return render_template('logs.html', data=data)
+    else:
+        return 'You are not logged in. <a href="/login">Login</a>'
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
