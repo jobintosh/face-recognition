@@ -22,27 +22,22 @@ import stripe
 stripe.api_key = 'sk_test_51NutLPBGGzOWH6WKvYHArctigy1hgkbnJKYslyXf4qDpm6gsbD1H7vA3YFVisTrkJIpve1DiV9yruIZ5QZ8dc4KS00dh18YMQB'
 
 
-# Create a logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)  # Set the log level to ERROR or lower
 
-# Define a log file handler
-# Change the file name and path as needed
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
+
 handler = logging.FileHandler('error.log')
 handler.setLevel(logging.ERROR)
 
-# Define a log format
 formatter = logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 
-# Add the handler to the logger
 logger.addHandler(handler)
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'
+app.secret_key = 'jobintosh'
 
-# Add the application attribute required by Gunicorn
 application = app
 
 cnt = 0
@@ -53,7 +48,7 @@ justscanned = False
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 
 mydb = mysql.connector.connect(
-    host="mariadb",
+    host="localhost",
     user="root",
     passwd="6u&h^j=U0w)bc[f",
     database="flask_db"
@@ -67,7 +62,7 @@ CASCADE_CLASSIF_PATH = "app/resources/haarcascade_frontalface_default.xml"
 
 FACE_CLASSIF_PATH = "classifier.xml"
 
-IMAGE_TRAIN_COUNT = 300
+IMAGE_TRAIN_COUNT = 100
 
 
 class RecognizeResult:
@@ -124,111 +119,142 @@ def train_classifier(nbr):
 
     return redirect('/')
 
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Face Recognition >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-def face_recognition():
-    def draw_boundary(img, classifier, scaleFactor, minNeighbors, color, text, clf):
-        gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        features = classifier.detectMultiScale(
-            gray_image, scaleFactor, minNeighbors)
 
-        global justscanned
-        global pause_cnt
-
-        pause_cnt += 1
-
-        coords = []
-
-        for (x, y, w, h) in features:
-            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            gray_face = gray_image[y:y + h, x:x + w]
-            id, pred = clf.predict(gray_face)
-            confidence = int(100 * (1 - pred / 300))
-
-            if confidence > 70 and not justscanned:
-                global cnt
-                cnt += 1
-
-                n = (100 / 30) * cnt
-                w_filled = (cnt / 30) * w
-
-                cv2.putText(img, str(int(n)) + ' %', (x + 20, y + h + 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
-                            (153, 255, 255), 2, cv2.LINE_AA)
-
-                cv2.rectangle(img, (x, y + h + 40),
-                              (x + w, y + h + 50), color, 2)
-                cv2.rectangle(img, (x, y + h + 40), (x + int(w_filled), y + h + 50), (153, 255, 255),
-                              cv2.FILLED)
-
-                mycursor.execute("select a.img_person, b.full_name, b.locker_no "
-                                 "  from img_dataset a "
-                                 "  left join personnel_data b on a.img_person = b.personnel_id "
-                                 " where img_id = " + str(id))
-                row = mycursor.fetchone()
-                pnbr = row[0]
-                pname = row[1]
-                pskill = row[2]
-
-                if int(cnt) == 30:
-                    cnt = 0
-
-                    mycursor.execute(
-                        "insert into activity_log (accs_date, accs_prsn) values('" + str(date.today()) + "', '" + pnbr + "')")
-                    mydb.commit()
-
-                    cv2.putText(img, pname + ' | ' + pskill, (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
-                                (153, 255, 255), 2, cv2.LINE_AA)
-                    time.sleep(1)
-
-                    justscanned = True
-                    pause_cnt = 0
-
-            else:
-                if not justscanned:
-                    cv2.putText(img, 'UNKNOWN', (x, y - 5),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
-                else:
-                    cv2.putText(
-                        img, ' ', (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
-
-                if pause_cnt > 80:
-                    justscanned = False
-
-            coords = [x, y, w, h]
-        return coords
-
-    def recognize(img, clf, faceCascade):
-        coords = draw_boundary(img, faceCascade, 1.1, 10,
-                               (255, 255, 0), "Face", clf)
-        return img
-
+def find_face(img_path):
     face_cascade = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
-    clf = cv2.face.LBPHFaceRecognizer_create()
-    clf.read("classifier.xml")
 
-    wCam, hCam = 400, 400
+    img = cv2.imread(img_path)
+    if img is None:
+        return []
 
-    cap = cv2.VideoCapture(0)
-    cap.set(3, wCam)
-    cap.set(4, hCam)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    while True:
-        ret, img = cap.read()
+    # Detect faces in the grayscale image
+    faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.3,
+        minNeighbors=5,
+        minSize=(30, 30)
+    )
 
-        if not ret:
-            continue
-
-        img = recognize(img, clf, face_cascade)
-
-        frame = cv2.imencode('.jpg', img)[1].tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
-
-        key = cv2.waitKey(1)
-        if key == 27:
-            break
+    return faces
 
 
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< LOGIN REGISTER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+def save_image_base64(image_base64, folder_path):
+    # Generate a unique filename
+    unique_filename = str(uuid.uuid4()) + ".jpeg"
+    image_path = os.path.join(folder_path, unique_filename)
+
+    # Decode the base64 image data and save it to the file
+    with open(image_path, "wb") as img_file:
+        img_data = base64.b64decode(image_base64)
+        img_file.write(img_data)
+
+    return unique_filename
+
+
+def label_img(img, label, confidence, x, y, w, h):
+    cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    label_text = f"{label} ({confidence:.2f})"
+    cv2.putText(
+        img,
+        label_text,
+        (x, y - 10),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        (0, 255, 0),
+        2,
+    )
+
+
+def recognize_face_from_img_path(img_path):
+    img = cv2.imread(img_path)
+    faces = find_face(img_path)
+
+    if len(faces) == 0:
+        print("No faces detected in the image.")
+        return None
+
+    output_image_path = 'test.jpeg'
+    recognizer = cv2.face.LBPHFaceRecognizer_create()
+    recognizer.read("classifier.xml")
+    recognized_faces = []
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    for (x, y, w, h) in faces:
+        face_roi = gray[y:y+h, x:x+w]
+        label, confidence = recognizer.predict(face_roi)
+
+        recognized_faces.append({
+            'bbox': (x, y, w, h),
+            'label': label,  
+            'confidence': confidence 
+        })
+
+    label = None
+    confidence = 0
+    for face in recognized_faces:
+        x, y, w, h = face['bbox']
+        label = face['label']
+        confidence = face['confidence']
+        print(f"Face: {label}, Confidence: {confidence}")
+        label_img(img, label, confidence, x, y, w, h)
+        break
+
+    cv2.imwrite(output_image_path, img)
+    print(f"Image with recognized faces saved as {output_image_path}")
+
+    result = RecognizeResult()
+
+    result.label = label
+    result.confidence = confidence
+
+    _, image_data = cv2.imencode('.jpg', img)
+    result.image = image_data
+
+    return result
+
+def generate_dataset_v2(person_id, img_path):
+    faces = find_face(img_path)
+
+    if len(faces) == 0:
+        return None
+
+    (x, y, w, h) = faces[0]
+
+    img = cv2.imread(img_path)
+
+    # Crop the detected face from the image
+    face_cropped_img = img[y:y+h, x:x+w]
+
+    if face_cropped_img is None:
+        return None
+
+    face = cv2.resize(face_cropped_img, (200, 200))
+    face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+
+    face_cropped_dir = os.path.join("facecrop", str(person_id))
+    os.makedirs(face_cropped_dir, exist_ok=True)
+
+    filename = os.path.basename(img_path)
+
+    save_path = os.path.join(face_cropped_dir, filename)
+    cv2.imwrite(save_path, face)
+
+    result = SaveResult()
+    result.image = face
+    result.label = person_id
+    result.save_path = save_path
+    result.x = x
+    result.y = y
+    result.h = h
+    result.w = w
+
+    return result
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Train Classifier >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ROUTEING >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 @app.route('/')
 def home():
     if 'user_id' in session:
@@ -268,49 +294,6 @@ def login():
             flash('Login failed. Please check your credentials.', 'error')
 
     return render_template('login.html')
-
-# @app.route('/login', methods=['GET', 'POST'])
-# def login():
-#     if request.method == 'POST':
-#         username_or_email = request.form['username_or_email']
-#         password = request.form['password']
-#         recaptcha_response = request.form['g-recaptcha-response']  # รับข้อมูล reCAPTCHA
-
-#         recaptcha_secret_key = '6Leck1IoAAAAAA3kDnwU_ovbJvY8jXn7K5Ln5x-Q'  # รหัสลับ reCAPTCHA (ให้เปลี่ยนเป็นรหัสที่คุณได้รับ)
-#         recaptcha_url = 'https://www.google.com/recaptcha/api/siteverify'
-#         recaptcha_data = {
-#             'secret': recaptcha_secret_key,
-#             'response': recaptcha_response
-#         }
-
-#         response = requests.post(recaptcha_url, data=recaptcha_data)
-#         recaptcha_result = response.json()
-
-#         if recaptcha_result['success']:
-#             # reCAPTCHA ยืนยันสำเร็จ
-#             cursor = mydb.cursor()
-#             cursor.execute("SELECT id, username, email, password_hash FROM users WHERE username=%s OR email=%s",
-#                            (username_or_email, username_or_email))
-#             user = cursor.fetchone()
-
-#             if user:
-#                 user_id, db_username, db_email, db_password_hash = user
-
-#                 input_password_hash = hashlib.sha256(password.encode()).hexdigest()
-#                 if input_password_hash == db_password_hash:
-#                     session['user_id'] = user_id
-#                     session['username'] = db_username
-#                     flash('Login successful!', 'success')
-#                     return redirect(url_for('home'))
-#                 else:
-#                     flash('Incorrect password. Please try again.', 'error')
-#             else:
-#                 flash('Login failed. Please check your credentials.', 'error')
-#         else:
-#             # reCAPTCHA ไม่ยืนยัน
-#             flash('reCAPTCHA verification failed. Please try again.', 'error')
-
-#     return render_template('login.html')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -396,8 +379,6 @@ def send_password_reset_email(email, temp_password):
         print(f'Error sending email: {str(e)}')
 
 
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< LOGIN REGISTER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
 @app.route('/index')
 def index():
     if 'user_id' in session:
@@ -418,9 +399,6 @@ def logout():
         return redirect(url_for('login'))
     else:
         return 'Method Not Allowed', 405
-
-
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< LOGIN OUTOUT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 @app.route('/addprsn')
 def addprsn():
@@ -478,7 +456,7 @@ def fr_page():
 def countTodayScan():
     try:
         mydb = mysql.connector.connect(
-            host="mariadb",
+            host="localhost",
             user="root",
             passwd="6u&h^j=U0w)bc[f",
             database="flask_db"
@@ -501,7 +479,7 @@ def countTodayScan():
 def loadData():
     try:
         mydb = mysql.connector.connect(
-            host="mariadb",
+            host="localhost",
             user="root",
             passwd="6u&h^j=U0w)bc[f",
             database="flask_db"
@@ -564,164 +542,6 @@ def delete_person(person_id):
 
 
 
-########################################## VERSION 2 ###########################################################
-
-
-def find_face(img_path):
-    face_cascade = cv2.CascadeClassifier(CASCADE_CLASSIF_PATH)
-
-    img = cv2.imread(img_path)
-    if img is None:
-        return []
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Detect faces in the grayscale image
-    faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.3,
-        minNeighbors=5,
-        minSize=(30, 30)
-    )
-
-    return faces
-
-
-def save_image_base64(image_base64, folder_path):
-    # Generate a unique filename
-    unique_filename = str(uuid.uuid4()) + ".jpeg"
-    image_path = os.path.join(folder_path, unique_filename)
-
-    # Decode the base64 image data and save it to the file
-    with open(image_path, "wb") as img_file:
-        img_data = base64.b64decode(image_base64)
-        img_file.write(img_data)
-
-    return unique_filename
-
-
-def label_img(img, label, confidence, x, y, w, h):
-    cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-    label_text = f"{label} ({confidence:.2f})"
-    cv2.putText(
-        img,
-        label_text,
-        (x, y - 10),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-        (0, 255, 0),
-        2,
-    )
-
-
-def recognize_face_from_img_path(img_path):
-    img = cv2.imread(img_path)
-    faces = find_face(img_path)
-
-    if len(faces) == 0:
-        print("No faces detected in the image.")
-        return None
-
-    # Save the input image with recognized faces
-    output_image_path = 'test.jpeg'
-
-    # Load a pre-trained face recognition model (you need to replace this with your model)
-    # Example:
-    recognizer = cv2.face.LBPHFaceRecognizer_create()
-    recognizer.read("classifier.xml")
-    # You should train this recognizer on a dataset of known faces
-
-    # Recognize the detected faces (you need to implement this based on your recognizer)
-    recognized_faces = []
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    for (x, y, w, h) in faces:
-        # Crop the detected face from the image
-        face_roi = gray[y:y+h, x:x+w]
-
-        # Perform face recognition (replace this with your recognition code)
-        # Example:
-        label, confidence = recognizer.predict(face_roi)
-
-        # Add recognized faces to the list
-        recognized_faces.append({
-            'bbox': (x, y, w, h),
-            'label': label,  # Replace with your recognized label or name
-            'confidence': confidence  # Replace with your recognition confidence score
-        })
-
-    label = None
-    confidence = 0
-    for face in recognized_faces:
-        x, y, w, h = face['bbox']
-        label = face['label']
-        confidence = face['confidence']
-
-        print(f"Face: {label}, Confidence: {confidence}")
-
-        # label the image
-        label_img(img, label, confidence, x, y, w, h)
-
-        # break after first face found!
-        break
-
-    # Save the image with rectangles drawn around recognized faces
-    cv2.imwrite(output_image_path, img)
-    print(f"Image with recognized faces saved as {output_image_path}")
-
-    result = RecognizeResult()
-
-    result.label = label
-    result.confidence = confidence
-
-    _, image_data = cv2.imencode('.jpg', img)
-    result.image = image_data
-
-    return result
-
-
-def generate_dataset_v2(person_id, img_path):
-    faces = find_face(img_path)
-
-    # No faces detected in the image
-    if len(faces) == 0:
-        return None
-
-    # Assume only one face is detected (you can modify this if needed)
-    (x, y, w, h) = faces[0]
-
-    img = cv2.imread(img_path)
-
-    # Crop the detected face from the image
-    face_cropped_img = img[y:y+h, x:x+w]
-
-    if face_cropped_img is None:
-        return None
-
-    face = cv2.resize(face_cropped_img, (200, 200))
-    face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-
-    face_cropped_dir = os.path.join("facecrop", str(person_id))
-    os.makedirs(face_cropped_dir, exist_ok=True)
-
-    filename = os.path.basename(img_path)
-
-    save_path = os.path.join(face_cropped_dir, filename)
-    cv2.imwrite(save_path, face)
-
-    result = SaveResult()
-
-    result.image = face
-    result.label = person_id
-    result.save_path = save_path
-    result.x = x
-    result.y = y
-    result.h = h
-    result.w = w
-
-    return result
-
-
 @app.route('/upload/<int:person_id>', methods=['POST'])
 def upload_image(person_id):
     try:
@@ -729,23 +549,18 @@ def upload_image(person_id):
         if 'image' in data:
             image_data_base64 = data['image']
 
-            # create upload directory
             upload_dir_path = os.path.join("dataset", str(person_id))
-            # Create the folder if it doesn't exist
             os.makedirs(upload_dir_path, exist_ok=True)
 
-            # create face crop directory
             facecrop_dir = os.path.join("facecrop", str(person_id))
             os.makedirs(facecrop_dir, exist_ok=True)
 
-            # Check the number of images in the folder
             image_count = len([f for f in os.listdir(facecrop_dir)])
 
             if image_count >= IMAGE_TRAIN_COUNT:
-                # send status done
-                # client side will redirect to train_face route
+
                 return jsonify({"status": "done"})
-            else:            # Save the image to the folder
+            else:           
                 filename = save_image_base64(
                     image_data_base64,
                     upload_dir_path
@@ -813,7 +628,6 @@ def train_face(person_id):
         finally:
             i += 1
 
-    # convert to numpy arrays
     faces = np.array(faces)
     ids = np.array(ids)
 
@@ -841,10 +655,8 @@ def recognize_v2():
             image_data = data['image']
             folder_path = os.path.join("recognize")
 
-            # Create the folder if it doesn't exist
             os.makedirs(folder_path, exist_ok=True)
 
-            # Save the image to the folder
             filename = save_image_base64(image_data, folder_path)
 
             image_full_path = os.path.join(folder_path, filename)
@@ -854,22 +666,17 @@ def recognize_v2():
 
             if result is None:
                 return jsonify({"message": "result not found"}), 400
+            recognized_label = "UNKNOWN"
 
-            # Check confidence level
             print(f"confidence level: {result.confidence}")
-            if result.confidence <= 40:
+            if result.confidence <= 20:
+                recognized_label = "UNKNOWN"
                 return jsonify({"message": "low confidence"}), 400
-
-            # Now, let's fetch the recognized person's label and save it in activity_log
             recognized_label = result.label
-
-            # Insert data into the 'activity_log' table
             sql = "INSERT INTO activity_log (accs_date, accs_prsn, accs_added) VALUES (%s, %s, %s)"
             val = (datetime.today(), recognized_label, datetime.now())
             mycursor.execute(sql, val)
             mydb.commit()
-
-            # Encode the result image and send it to detect.js
             base64_image = base64.b64encode(result.image).decode()
 
             return jsonify({"message": "done", "label": recognized_label, "image64": base64_image})
@@ -881,15 +688,9 @@ def recognize_v2():
 @app.route('/edit_profile/<int:user_id>', methods=['GET', 'POST'])
 def edit_profile(user_id):
     if 'user_id' not in session:
-        # User is not logged in, so redirect to the login page
         return redirect(url_for('login'))
-
-    # Check if the logged-in user is authorized to edit this profile
     if session['user_id'] != user_id:
-        # Unauthorized access, you can handle this as per your application's requirements
         return "Unauthorized access"
-
-    # The rest of your code for editing the profile remains the same
     mycursor = mydb.cursor()
     mycursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
     user = mycursor.fetchone()
@@ -899,13 +700,9 @@ def edit_profile(user_id):
         lastname = request.form['lastname']
         email = request.form['email']
         phonenumber = request.form['phonenumber']
-
-        # Check if a new password was provided
         new_password = request.form['new_password']
 
-        # Update user data in the database
         if new_password:
-            # Hash the new password before updating it
             hashed_password = hashlib.sha256(new_password.encode()).hexdigest()
             mycursor.execute("UPDATE users SET firstname = %s, lastname = %s, email = %s, phonenumber = %s, password_hash = %s WHERE id = %s",
                              (firstname, lastname, email, phonenumber, hashed_password, user_id))
@@ -973,18 +770,13 @@ def webhook():
             print('⚠️  Webhook signature verification failed.' + str(e))
             return jsonify(success=False)
 
-    # Handle the event
     if event and event['type'] == 'payment_intent.succeeded':
-        payment_intent = event['data']['object']  # contains a stripe.PaymentIntent
+        payment_intent = event['data']['object']  
         print('Payment for {} succeeded'.format(payment_intent['amount']))
-        # Then define and call a method to handle the successful payment intent.
-        # handle_payment_intent_succeeded(payment_intent)
+
     elif event['type'] == 'payment_method.attached':
-        payment_method = event['data']['object']  # contains a stripe.PaymentMethod
-        # Then define and call a method to handle the successful attachment of a PaymentMethod.
-        # handle_payment_method_attached(payment_method)
+        payment_method = event['data']['object'] 
     else:
-        # Unexpected event type
         print('Unhandled event type {}'.format(event['type']))
 
     return jsonify(success=True)
@@ -1004,4 +796,4 @@ def logs():
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=80, debug=True)

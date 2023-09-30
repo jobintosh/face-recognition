@@ -33,8 +33,9 @@ function updateImageOutput(data) {
     imgElement.src = 'data:image/jpeg;base64,' + data.image64;
 
     // Create a paragraph element for the label
-    const labelElement = document.createElement('p');
-    labelElement.textContent = 'Label: ' + data.label;
+    // const labelElement = document.createElement('p');
+    // labelElement.textContent = 'Label: ' + data.label;
+    //labelElement.textContent = 'confidence: ' + result.confidence;
 
     // Clear the loading message and append the image and label
     imageContainer.innerHTML = '';
@@ -74,7 +75,7 @@ function captureFrame() {
 
 // Start capturing frames when the video is playing
 videoElement.addEventListener('play', function () {
-    setInterval(captureFrame, 5000); // Capture frame every 1 second
+    setInterval(captureFrame, 3000); // Capture frame every 1 second
 });
 
 // Optionally, you can stop capturing frames when the video is paused or ended
