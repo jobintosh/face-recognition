@@ -1,14 +1,9 @@
-# Use an official Python runtime as a parent image
 FROM python:3.9.18-slim-bullseye
 
-# Install any necessary dependencies
 RUN pip install requests
 
-# Set the working directory to /notification (inside the container)
 WORKDIR /app
 
-# Copy the lineapi.py script from the notification directory on your host into the /notification directory in the container
 COPY notification/lineapi.py /app
 
-# Run your Python script when the container starts
 CMD ["python", "lineapi.py"]

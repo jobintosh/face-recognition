@@ -1,21 +1,17 @@
 version: '3'
 services:
-  flask-app:
+  app:
     build:
       context: .
     ports:
       - "80:5000"
     environment:
-      - SECRET_KEY=your_secret_key_here
-      - MYSQL_HOST=mariadb
-      - MYSQL_PORT=3306
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=6u&h^j=U0w)bc[f
-      - MYSQL_DATABASE=flask_db
       - TZ=Asia/Bangkok
     depends_on:
       - mariadb
     restart: always
+    volumes:
+      - .:/root
 
   lineapi:
     build:
@@ -38,6 +34,7 @@ services:
     - 3306:3306
     volumes:
       - ./mysql-data:/var/lib/mysql
+
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin

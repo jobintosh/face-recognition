@@ -15,10 +15,17 @@ services:
     volumes:
       - ./mysql-data:/var/lib/mysql
 
+  # lineapi:
+  #   build:
+  #     context: ./ 
+  #     dockerfile: dockerline
+  #   container_name: lineapi
+  #   restart: always
+
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: phpmyadmin
-    restart: always  # Add this line to set the restart policy to "always"
+    restart: always 
     environment:
       PMA_HOST: mariadb
       PMA_PORT: 3306
