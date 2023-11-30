@@ -1,9 +1,0 @@
-FROM python:3.9.18-slim-bullseye
-
-RUN pip install requests
-
-WORKDIR /app
-
-COPY notification/lineapi.py /app
-
-CMD ["python", "lineapi.py"]
